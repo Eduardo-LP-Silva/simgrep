@@ -3,12 +3,14 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define BUFFER_SIZE 512
+#define COLOR_RED     "\x1b[31m"
+#define RESET_COLOR   "\x1b[0m"
 
 int main(int argc, char *argv[]) {
 	int fd1, n_read;
-	unsigned char buffer[BUFFER_SIZE];
 
 	if(argc < 2)
 	{
@@ -25,42 +27,63 @@ int main(int argc, char *argv[]) {
 			return 2;
 		}
 	}
-	char *check_word = malloc(strlen(argv[1]) * sizeof(char));
+	char c;
+	int m = 0;
+	char buffer[BUFFER_SIZE];
 
-	while ((n_read = read(fd1, buffer, BUFFER_SIZE)) > 0) {
-		int i = 0, j = 0, k = 0;
-
-		//gets sentence until \n: j->where the sentence starts; k->where it ends
-		while (i < n_read) {
-			while (buffer[i] != '\n' && i != n_read)
-				i++;
-			j = k;
-			k = i;
-			i = j;
-
-			//checks if sentence contains the wanted word and shows sentence if yes
-			while ((i < k - strlen(argv[1])) && (k-j >= strlen(argv[1]))) {
-				strncpy(check_word, buffer + i, strlen(argv[1]));
-				int equals = 1;
-				for (int m = 0; m < strlen(argv[1]); m++) {
-					if (*(check_word + m) != *(argv[1] + m))
-						equals = 0;
-				}
-				if (equals == 1) {
-					char* to_show = malloc(BUFFER_SIZE);
-					strncpy(to_show, buffer + j, k-j);
-					write(STDOUT_FILENO, to_show, k-j);
-					if(argc == 2)
-						write(STDOUT_FILENO, "\n", 1);
-					break;
-				}
-				i++;
-			}
-			i = k+1;
+	while (read(fd1, &c, 1) > 0) {
+		buffer[m] = c;
+		m++;
+		if(c == '\n')
+		{
+			char *check_word = malloc(m*sizeof(char));
+			strncpy(check_word, buffer, m);
+			m = 0;
+			if(strlen(check_word) >= strlen(argv[1]))
+				getNWordsInSentence(check_word, argv[1]);
 		}
 	}
-	write(STDOUT_FILENO, "\n", 1);
+	if (fd1 != STDIN_FILENO) {
+		char *check_word = malloc(m * sizeof(char));
+		strncpy(check_word, buffer, m);
+		m = 0;
+		if (strlen(check_word) >= strlen(argv[1]))
+			getNWordsInSentence(check_word, argv[1]);
+	}
 
 	close(fd1);
 	return 0;
+}
+
+int getNWordsInSentence(char* sentence, char* word)
+{
+	int i = 0, j = 0;
+	int number = 0;
+	char* check_word = malloc(strlen(word)*sizeof(char));
+	while (i < strlen(sentence) -strlen(word)) {
+		strncpy(check_word, sentence + i, strlen(word));
+		int equals = 1;
+		for (int m = 0; m < strlen(word); m++) {
+			if (*(check_word + m) != *(word + m))
+				equals = 0;
+		}
+		if (equals == 1) {
+			number++;
+			if (i != j) {
+				char* to_show = malloc(BUFFER_SIZE);
+				strncpy(to_show, sentence + j, i - j);
+				printf("%s", to_show);
+			}
+			printf(COLOR_RED "%s" RESET_COLOR, check_word);
+			j = i + strlen(word);
+		}
+		i++;
+	}
+	if(number > 0)
+	{
+		char* to_show = malloc(BUFFER_SIZE);
+		strncpy(to_show, sentence + j, strlen(sentence)-j);
+		printf("%s", to_show);
+	}
+	return number;
 }
