@@ -175,6 +175,8 @@ int getWordInSentence(char* sentence, char* word, int notToShow, int nl)
 					printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
 				printf("%s", to_show);
 			}
+			if(i == 0 && found == 1 && nl != 0)
+				printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
 			printf(COLOR_RED "%s" RESET_COLOR, check_word);
 			j = i + strlen(word);
 		}
@@ -223,6 +225,8 @@ int getWordInSentence_i(char* sentence, char* word, int notToShow, int nl)
 					printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
 				printf("%s", to_show);
 			}
+			if(i == 0 && found == 1 && nl != 0)
+				printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
 			printf(COLOR_RED "%s" RESET_COLOR, check_word);
 			j = i + strlen(word);
 		}
