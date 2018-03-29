@@ -80,6 +80,7 @@ int getNWordsInSentence(char* sentence, char* word, int nl)
 {
 	int i = 0, j = 0;
 	int number = 0;
+	int found = 0;
 	char* check_word = malloc(strlen(word)*sizeof(char));
 
 	while (i < strlen(sentence) -strlen(word)) 
@@ -87,7 +88,6 @@ int getNWordsInSentence(char* sentence, char* word, int nl)
 		strncpy(check_word, sentence + i, strlen(word));
 
 		int equals = 1;
-        int found = 0;
 
 		for (int m = 0; m < strlen(word); m++) 
         {
