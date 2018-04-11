@@ -9,11 +9,12 @@
 
 #define BUFFER_SIZE 512
 #define COLOR_RED     "\x1b[31m"
+#define COLOR_GREEN  "\x1B[32m"
+#define COLOR_MAGENTA "\x1B[35m"
 #define RESET_COLOR   "\x1b[0m"
 
 int simgrep_r(char *word, char *directory);
 int isFile(char *name);
-int getNWordsInSentence(char* sentence, char* word);
 
 int main(int argc, char *argv[]) 
 {
@@ -25,7 +26,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-    simgrep_r("teste", ".");
+    simgrep_r("for", "./textfiles");
 
     /*
     for(i = 1; i < argc; i++)
@@ -124,8 +125,8 @@ int simgrep_i(char *word, char *file)
 			m = 0;
 
 			if(strlen(check_word) >= strlen(word))
-				getNWordsInSentence(check_word, word);
-
+				//getWordInSentence(char* sentence, char* word, int notToShow, int nl, int l);
+				break;
             
 		}
 	}
@@ -146,12 +147,106 @@ int simgrep_i(char *word, char *file)
 	return 0;
 }
 
+int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l, int r)
+{
+	char c;
+	int m = 0, nWords =0, n_line = 0;
+	char buffer[BUFFER_SIZE];
+	if(n)
+		n_line++;
+
+	while (read(fd1, &c, 1) > 0) {
+		buffer[m] = c;
+		m++;
+		if(c == '\n')
+		{
+			char *check_word = malloc(m*sizeof(char));
+			strncpy(check_word, buffer, m);
+			m = 0;
+
+			if(strlen(check_word) >= strlen(word))
+			{
+				if(i){
+					if(getWordInSentence(file,check_word, word, count, n_line,l,1)==1)
+						{nWords++;
+
+						if(l==1)
+							if(fd1==STDIN_FILENO){
+							printf(COLOR_MAGENTA "(standard input)" RESET_COLOR "\n");
+							return 0;}
+
+							else printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+						}
+				}
+				else if(w){
+					if(getWordInSentence(file,check_word, word, count, n_line,l,1)==1)
+						{nWords++;
+
+						if(l==1)
+							if(fd1==STDIN_FILENO){
+							printf(COLOR_MAGENTA "(standard input)" RESET_COLOR "\n");
+								return 0;}
+							else printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+						}
+				}
+				else{
+
+					if(getWordInSentence(file,check_word, word, count, n_line,l,1)==1)
+						{nWords++;
+
+						if(l==1)
+							if(fd1==STDIN_FILENO){
+							printf(COLOR_MAGENTA "(standard input)" RESET_COLOR "\n");
+							return 0;}
+
+							else printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+						}
+			}}
+			if(n)
+				n_line++;
+		}
+	}
+	if (fd1 != STDIN_FILENO) {
+		char *check_word = malloc(m * sizeof(char));
+		strncpy(check_word, buffer, m);
+		m = 0;
+		if(strlen(check_word) >= strlen(word))
+			{
+				if(i)
+					if(getWordInSentence(file,check_word, word, count, n_line,l,1)==1)
+						{nWords++;
+						if(l==1)
+							printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+							return 0;
+						}
+				else if(w)
+					if(getWordInSentence(file,check_word, word, count, n_line,l,1)==1)
+						{nWords++;
+						if(l==1)
+							printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+							return 0;
+						}
+				else
+
+					if(getWordInSentence(file,check_word, word, count, n_line,l,1)==1)
+						{nWords++;
+						if(l==1)
+							printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+							return 0;
+						}
+			}
+	}
+	if(count)
+		printf("%d\n", nWords);
+	return 0;
+}
+
 int simgrep_r(char *word, char *directory) 
 {
     DIR *d;
     struct dirent *dir;
     int file_type;
-
+    int fd1;
     d = opendir(directory);
     
     if(d)
@@ -167,7 +262,13 @@ int simgrep_r(char *word, char *directory)
                     return -1;
 
                 case 0:
-                    printf("%s is a file\n", dir->d_name);
+                	fd1 = open(dir->d_name, O_RDONLY);
+                	char* str = malloc(BUFFER_SIZE);
+                	strcat(str, directory);
+                	strcat(str,"/");
+                	strcat(str,dir->d_name);
+                	reading(str, fd1, word, 0,0,0,0,1,1);
+                	close(fd1);
                     break;
 
                 case 1:
@@ -183,51 +284,61 @@ int simgrep_r(char *word, char *directory)
 	return 0;
 }
 
-int getNWordsInSentence(char* sentence, char* word)
+int getWordInSentence(char* file, char* sentence, char* word, int notToShow, int nl, int l, int r)
 {
 	int i = 0, j = 0;
-	int number = 0;
+	int number = 0, found = 0;
 	char* check_word = malloc(strlen(word)*sizeof(char));
-
-	while (i < strlen(sentence) -strlen(word)) 
-    {
+	while (i < strlen(sentence) -strlen(word)) {
 		strncpy(check_word, sentence + i, strlen(word));
-
 		int equals = 1;
-
-		for (int m = 0; m < strlen(word); m++) 
-        {
-			if (check_word[m] != word[m] && (int) check_word[m] != (int) word[m] + 32
-                && (int) check_word[m] != (int) word[m] - 32)
+		for (int m = 0; m < strlen(word); m++) {
+			if (*(check_word + m) != *(word + m))
 				equals = 0;
 		}
-
-		if (equals == 1) 
-        {
+		if (equals == 1) {
 			number++;
 
-			if (i != j) 
-            {
+			if(found == 0){
+				found = 1;
+				if(l==1)
+					return 1;
+			}
+			else
+				if(found == 1)
+					found = 2;
+
+			if(notToShow)
+				break;
+			if (i != j) {
 				char* to_show = malloc(BUFFER_SIZE);
 				strncpy(to_show, sentence + j, i - j);
+				if(found == 1 && nl != 0)
+					printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
+				else if (found == 1 && r != 0)
+					printf(COLOR_MAGENTA "%s:" RESET_COLOR, file);
 				printf("%s", to_show);
 			}
-
+			if(i == 0 && found == 1 && nl != 0)
+				printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
+			else if (i == 0 && found == 1 && r != 0)
+				printf(COLOR_MAGENTA "%s:" RESET_COLOR, file);
 			printf(COLOR_RED "%s" RESET_COLOR, check_word);
 			j = i + strlen(word);
 		}
-
 		i++;
 	}
-
 	if(number > 0)
 	{
+		if(notToShow)
+			return 1;
 		char* to_show = malloc(BUFFER_SIZE);
 		strncpy(to_show, sentence + j, strlen(sentence)-j);
 		printf("%s", to_show);
+		return 1;
 	}
 
-	return number;
+	return 0;
 }
 
 
