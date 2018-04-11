@@ -247,13 +247,17 @@ int simgrep_r(char *word, char *directory)
     struct dirent *dir;
     int file_type;
     int fd1;
-    d = opendir(directory);
-    
-    if(d)
-    {
-        while((dir = readdir(d)) != NULL)
-        {
-            file_type = isFile(dir->d_name);
+    pid_t pid;
+	d = opendir(directory);
+
+	if (d) {
+		while ((dir = readdir(d)) != NULL) {
+			//printf("in directory: %s\n", dir->d_name);
+			char* str1 = malloc(BUFFER_SIZE);
+			strcat(str1, directory);
+			strcat(str1, "/");
+			strcat(str1, dir->d_name);
+			file_type = isFile(str1);
 
             switch(file_type)
             {
@@ -267,19 +271,29 @@ int simgrep_r(char *word, char *directory)
                 	strcat(str, directory);
                 	strcat(str,"/");
                 	strcat(str,dir->d_name);
-                	reading(str, fd1, word, 0,0,0,0,1,1);
+                	reading(str, fd1, word, 0,0,0,0,0,1);
+                	//printf("filename: %s\n", dir->d_name);
                 	close(fd1);
                     break;
 
                 case 1:
-                    printf("%s is a directory\n", dir->d_name);
+                	printf("%s is a directory\n", dir->d_name);
+                	pid = fork();
+                	if(pid == 0)
+                	{
+                		//setpgrp(getpid());
+                		simgrep_r(word, dir->d_name);
+                		return 0;
+                	}
+                    //printf("%s is a directory\n", dir->d_name);
                     break;
 
                 case 2:
-                    continue;
+                    break;
             }
         }
-    }
+		closedir(d);
+	}
 
 	return 0;
 }
@@ -349,6 +363,9 @@ int isFile(char *name)
     int status;
     struct stat st_buf;
 
+    char* dot = malloc(BUFFER_SIZE), *two_dots = malloc(BUFFER_SIZE);
+    strncpy(dot, name + strlen(name)-1, 1);
+    strncpy(two_dots, name + strlen(name)-2, 2);
     status = stat(name, &st_buf);
 
     if(status != 0)
@@ -357,7 +374,7 @@ int isFile(char *name)
         return -1;
     }
     
-    if(!strcmp(name, ".") || !strcmp(name, ".."))
+    if(!strcmp(dot, ".") || !strcmp(two_dots, "..") )
         return 2;
 
     if(S_ISREG(st_buf.st_mode))
