@@ -14,9 +14,10 @@
 #define COLOR_MAGENTA "\x1B[35m"
 #define RESET_COLOR   "\x1b[0m"
 
-int simgrep_r(char *word, char *directory);
+int simgrep_r(char *word, char *directory, int l, int n, int c, int w, int i);
 int isFile(char *name);
 
+static pid_t g_pid;
 static int cont = 0;
 
 void sigint_handler(int signo)
@@ -29,17 +30,19 @@ void sigint_handler(int signo)
 		read(STDIN_FILENO, &trash, 1);
 		while(trash != '\n')
 			read(STDIN_FILENO, &trash, 1);
-		if (answer == 'Y')
+		if (answer == 'Y' || answer == 'y')
+		{
+			kill(g_pid, SIGINT);
 			exit(2);
-		if(answer != 'N')
+		}
+		if(answer != 'N' && answer != 'n')
 			write(STDOUT_FILENO, "\nWrong answer. Try again.",25);
-	} while(answer != 'N');
+	} while(answer != 'N' && answer != 'n');
 	cont = 1;
 }
 
 int main(int argc, char *argv[]) 
 {
-	int i, c;
 
 	if(argc < 2)
 	{
@@ -54,8 +57,9 @@ int main(int argc, char *argv[])
 				fprintf(stderr, "Unable to install SIGINT handler\n");
 				exit(1);
 			}
+	int l = 0, i = 0, w = 0, n = 0, c = 0;
 
-    simgrep_r("for", "./textfiles");
+    simgrep_r("for", "./textfiles", l, n, c, w, i);
 
     /*
     for(i = 1; i < argc; i++)
@@ -121,57 +125,6 @@ int main(int argc, char *argv[])
 	} */
 
 	//close(fd1); 
-
-	return 0;
-}
-
-int simgrep_i(char *word, char *file) 
-{
-	int fd1, n_read;
-
-	fd1 = open(file, O_RDONLY);
-
-	if (fd1 == -1) 
-    {
-		perror(file);
-		return 2;
-	}
-	
-	char c;
-	int m = 0;
-	char buffer[BUFFER_SIZE];
-
-	while (read(fd1, &c, 1) > 0) 
-    {
-		buffer[m] = c;
-		m++;
-
-		if(c == '\n')
-		{
-			char *check_word = malloc(m*sizeof(char));
-
-			strncpy(check_word, buffer, m);
-			m = 0;
-
-			if(strlen(check_word) >= strlen(word))
-				//getWordInSentence(char* sentence, char* word, int notToShow, int nl, int l);
-				break;
-            
-		}
-	}
-
-	/*if (fd1 != STDIN_FILENO) 
-    {
-		char *check_word = malloc(m * sizeof(char));
-
-		strncpy(check_word, buffer, m);
-		m = 0;
-
-		if (strlen(check_word) >= strlen(argv[1]))
-			getNWordsInSentence(check_word, argv[1]);
-	} */
-
-	close(fd1);
 
 	return 0;
 }
@@ -276,7 +229,7 @@ int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l
 	return 0;
 }
 
-int simgrep_r(char *word, char *directory) 
+int simgrep_r(char *word, char *directory, int l, int n, int c, int w, int i)
 {
     DIR *d;
     struct dirent *dir;
@@ -305,7 +258,7 @@ int simgrep_r(char *word, char *directory)
                 	strcat(str, directory);
                 	strcat(str,"/");
                 	strcat(str,dir->d_name);
-                	reading(str, fd1, word, 0,0,0,0,0,1);
+                	reading(str, fd1, word, c,i,n,w,l,1);
                 	close(fd1);
                     break;
 
@@ -314,11 +267,15 @@ int simgrep_r(char *word, char *directory)
                 	if(pid == 0)
                 	{
                 		setpgrp();
-                		simgrep_r(word, str1);
+                		sleep(3); //TEST
+                		simgrep_r(word, str1, l, n, c, w, i);
                 		return 0;
                 	}
                 	else
-                		waitpid(pid);
+                	{
+                		g_pid = getpgid(getpid());
+                		waitpid(pid, NULL ,0);
+                	}
                     break;
 
                 case 2:
