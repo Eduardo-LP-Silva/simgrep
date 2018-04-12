@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <signal.h>
 
 #define BUFFER_SIZE 512
 #define COLOR_RED     "\x1b[31m"
@@ -16,6 +17,26 @@
 int simgrep_r(char *word, char *directory);
 int isFile(char *name);
 
+static int cont = 0;
+
+void sigint_handler(int signo)
+{
+	char answer, trash;
+	do{
+		write(STDOUT_FILENO, "\nAre you sure you want to terminate the program? (Y/N) ", 55);
+		fflush(stdout);
+		read(STDIN_FILENO, &answer, 1);
+		read(STDIN_FILENO, &trash, 1);
+		while(trash != '\n')
+			read(STDIN_FILENO, &trash, 1);
+		if (answer == 'Y')
+			exit(2);
+		if(answer != 'N')
+			write(STDOUT_FILENO, "\nWrong answer. Try again.",25);
+	} while(answer != 'N');
+	cont = 1;
+}
+
 int main(int argc, char *argv[]) 
 {
 	int i, c;
@@ -25,6 +46,14 @@ int main(int argc, char *argv[])
 		printf("Usage: simgrep [OPTION]... PATTERN [FILE]...\n");
 		return 1;
 	}
+	struct sigaction action;
+			action.sa_handler = sigint_handler;
+			sigemptyset(&action.sa_mask);
+			action.sa_flags = 0;
+			if (sigaction(SIGINT, &action, NULL) < 0) {
+				fprintf(stderr, "Unable to install SIGINT handler\n");
+				exit(1);
+			}
 
     simgrep_r("for", "./textfiles");
 
@@ -252,7 +281,6 @@ int simgrep_r(char *word, char *directory)
 
 	if (d) {
 		while ((dir = readdir(d)) != NULL) {
-			//printf("in directory: %s\n", dir->d_name);
 			char* str1 = malloc(BUFFER_SIZE);
 			strcat(str1, directory);
 			strcat(str1, "/");
@@ -272,20 +300,19 @@ int simgrep_r(char *word, char *directory)
                 	strcat(str,"/");
                 	strcat(str,dir->d_name);
                 	reading(str, fd1, word, 0,0,0,0,0,1);
-                	//printf("filename: %s\n", dir->d_name);
                 	close(fd1);
                     break;
 
                 case 1:
-                	printf("%s is a directory\n", dir->d_name);
                 	pid = fork();
                 	if(pid == 0)
                 	{
-                		//setpgrp(getpid());
-                		simgrep_r(word, dir->d_name);
+                		setpgrp();
+                		simgrep_r(word, str1);
                 		return 0;
                 	}
-                    //printf("%s is a directory\n", dir->d_name);
+                	else
+                		waitpid(pid);
                     break;
 
                 case 2:
@@ -294,7 +321,6 @@ int simgrep_r(char *word, char *directory)
         }
 		closedir(d);
 	}
-
 	return 0;
 }
 
