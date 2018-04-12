@@ -12,6 +12,7 @@
 #define COLOR_RED     "\x1b[31m"
 #define COLOR_GREEN  "\x1B[32m"
 #define COLOR_MAGENTA "\x1B[35m"
+#define COLOR_CYAN    "\x1b[36m"
 #define RESET_COLOR   "\x1b[0m"
 
 int simgrep_r(char *word, char *directory, int l, int n, int c, int w, int i);
@@ -57,9 +58,9 @@ int main(int argc, char *argv[])
 				fprintf(stderr, "Unable to install SIGINT handler\n");
 				exit(1);
 			}
-	int l = 0, i = 0, w = 0, n = 0, c = 0;
+	int l = 0, i = 0, w = 0, n = 1, c = 0;
 
-    simgrep_r("for", "./textfiles", l, n, c, w, i);
+    simgrep_r("for", "textfiles", l, n, c, w, i);
 
     /*
     for(i = 1; i < argc; i++)
@@ -224,8 +225,10 @@ int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l
 						}
 			}
 	}
-	if(count)
+	if(count && !r)
 		printf("%d\n", nWords);
+	else if (count && r)
+		printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR "%d\n",file, nWords);
 	return 0;
 }
 
@@ -267,7 +270,7 @@ int simgrep_r(char *word, char *directory, int l, int n, int c, int w, int i)
                 	if(pid == 0)
                 	{
                 		setpgrp();
-                		sleep(3); //TEST
+                		//sleep(3); //TEST
                 		simgrep_r(word, str1, l, n, c, w, i);
                 		return 0;
                 	}
@@ -316,16 +319,16 @@ int getWordInSentence(char* file, char* sentence, char* word, int notToShow, int
 			if (i != j) {
 				char* to_show = malloc(BUFFER_SIZE);
 				strncpy(to_show, sentence + j, i - j);
+				if (found == 1 && r != 0)
+					printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 				if(found == 1 && nl != 0)
-					printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
-				else if (found == 1 && r != 0)
-					printf(COLOR_MAGENTA "%s:" RESET_COLOR, file);
+					printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 				printf("%s", to_show);
 			}
+			if (i == 0 && found == 1 && r != 0)
+				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 			if(i == 0 && found == 1 && nl != 0)
-				printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
-			else if (i == 0 && found == 1 && r != 0)
-				printf(COLOR_MAGENTA "%s:" RESET_COLOR, file);
+				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 			printf(COLOR_RED "%s" RESET_COLOR, check_word);
 			j = i + strlen(word);
 		}
