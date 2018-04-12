@@ -196,7 +196,7 @@ int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l
 			if(strlen(check_word) >= strlen(word))
 			{
 				if(i){
-					if(getWordInSentence(file,check_word, word, count, n_line,l,1)==1)
+					if(getWordInSentence(file,check_word, word, count, n_line,l,r)==1)
 						{nWords++;
 
 						if(l==1)
@@ -208,7 +208,7 @@ int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l
 						}
 				}
 				else if(w){
-					if(getWordInSentence(file,check_word, word, count, n_line,l,1)==1)
+					if(getWordInSentence(file,check_word, word, count, n_line,l,r)==1)
 						{nWords++;
 
 						if(l==1)
@@ -220,7 +220,7 @@ int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l
 				}
 				else{
 
-					if(getWordInSentence(file,check_word, word, count, n_line,l,1)==1)
+					if(getWordInSentence(file,check_word, word, count, n_line,l,r)==1)
 						{nWords++;
 
 						if(l==1)
@@ -228,7 +228,12 @@ int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l
 							printf(COLOR_MAGENTA "(standard input)" RESET_COLOR "\n");
 							return 0;}
 
-							else printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+							else
+							{
+								printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+								if(r == 1)
+									return 0;
+							}
 						}
 			}}
 			if(n)
@@ -242,14 +247,14 @@ int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l
 		if(strlen(check_word) >= strlen(word))
 			{
 				if(i)
-					if(getWordInSentence(file,check_word, word, count, n_line,l,1)==1)
+					if(getWordInSentence(file,check_word, word, count, n_line,l,r)==1)
 						{nWords++;
 						if(l==1)
 							printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
 							return 0;
 						}
 				else if(w)
-					if(getWordInSentence(file,check_word, word, count, n_line,l,1)==1)
+					if(getWordInSentence(file,check_word, word, count, n_line,l,r)==1)
 						{nWords++;
 						if(l==1)
 							printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
@@ -257,8 +262,9 @@ int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l
 						}
 				else
 
-					if(getWordInSentence(file,check_word, word, count, n_line,l,1)==1)
-						{nWords++;
+					if(getWordInSentence(file,check_word, word, count, n_line,l,r)==1)
+						{
+						nWords++;
 						if(l==1)
 							printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
 							return 0;
