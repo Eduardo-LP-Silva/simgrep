@@ -59,7 +59,8 @@ int main(int argc, char *argv[], char *ecnvp[]) {
 	ticks = sysconf(_SC_CLK_TCK);
 	char* logfilename = malloc(BUFFER_SIZE);
 	logfilename = getenv("LOGFILENAME");
-	fdlog = open(logfilename, O_WRONLY | O_APPEND | O_CREAT | O_EXCL, 0644);
+	fdlog = open(logfilename, O_WRONLY | O_APPEND | O_CREAT, 0750);
+			//S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 	if(fdlog < 0)
 	{
 		printf("Error opening log file name\n");
