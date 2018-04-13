@@ -1,29 +1,7 @@
-#include <stdio.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <string.h>
-#include <stdlib.h>
-#include <dirent.h>
-#include <sys/stat.h>
-#include <signal.h>
-
-#define BUFFER_SIZE 512
-#define COLOR_RED     "\x1b[31m"
-#define COLOR_GREEN  "\x1B[32m"
-#define COLOR_MAGENTA "\x1B[35m"
-#define COLOR_CYAN    "\x1b[36m"
-#define RESET_COLOR   "\x1b[0m"
+#include "simgrep.h"
 
 static pid_t g_pid;
 static int cont = 0;
-
-int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l, int r);
-int getWordInSentence(char* file, char* sentence, char* word, int notToShow, int nl, int l, int r);
-int getWordInSentence_i(char* file, char* sentence, char* word, int notToShow, int nl, int l, int r);
-int getWordInSentence_w(char* file, char* sentence, char* word, int notToShow, int nl, int l, int r);
-int getWordInSentence_w_i(char* file, char* sentence, char* word, int notToShow, int nl, int l, int r);
-int simgrep_r(char *word, char *directory, int l, int n, int c, int w, int i);
 
 void sigint_handler(int signo)
 {
@@ -77,7 +55,7 @@ int main(int argc, char *argv[]) {
 		indexPat = argc-2;
 	}
 
-	for (int j = 1; j < indexPat; j++) {
+	for (int j = 1; j < argc; j++) {
 		strncpy(a, argv[j], 2);
 		if(a[0] != '-')
 			break;
@@ -773,7 +751,7 @@ int simgrep_r(char *word, char *directory, int l, int n, int c, int w, int i)
             switch(file_type)
             {
                 case -1:
-                    break;
+                    return 0;
 
                 case 0:
                 	fd1 = open(dir->d_name, O_RDONLY);
