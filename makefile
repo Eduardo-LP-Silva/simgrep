@@ -1,6 +1,6 @@
 #Makefile
 
-simgrep: simgrep.c
+simgrep: simgrep.h simgrep.c
 	cc -Wall -o simgrep simgrep.c
 
 clean:
