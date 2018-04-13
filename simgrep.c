@@ -714,8 +714,10 @@ int isFile(char *name)
 
     char* dot = malloc(BUFFER_SIZE), *two_dots = malloc(BUFFER_SIZE);
     strncpy(dot, name + strlen(name)-1, 1);
-    strncpy(two_dots, name + strlen(name)-2, 2);
+    if(strlen(name)>=2)
+    	strncpy(two_dots, name + strlen(name)-2, 2);
     status = stat(name, &st_buf);
+
 
     if(status != 0)
     {
@@ -723,11 +725,26 @@ int isFile(char *name)
         return -1;
     }
 
-    if(!strcmp(dot, ".") || !strcmp(two_dots, "..") )
+    if(!strcmp(dot, ".") || (strlen(name)>=2 && !strcmp(two_dots, "..")) )
         return 2;
 
     if(S_ISREG(st_buf.st_mode))
-        return 0;
+    {
+    	char* txt = malloc(BUFFER_SIZE), *c = malloc(BUFFER_SIZE);
+    	if(strlen(name)>=4)
+    	{
+    		strncpy(txt, name + strlen(name)-4, 4);
+    		if(!strcmp(txt,".txt"))
+    			return 0;
+    	}
+    	if(strlen(name)>=2)
+    	{
+    		strncpy(c, name + strlen(name) - 2, 2);
+    		if(!strcmp(c,".c"))
+    		    return 0;
+    	}
+    	return 2;
+    }
 
 
     if(S_ISDIR(st_buf.st_mode))
