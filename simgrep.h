@@ -10,6 +10,7 @@
 #include <sys/types.h> 
 #include <wait.h>
 #include <ctype.h>
+#include <sys/times.h> 
 
 #define BUFFER_SIZE 512
 #define COLOR_RED     "\x1b[31m"
@@ -19,6 +20,8 @@
 #define RESET_COLOR   "\x1b[0m"
 
 void sigint_handler(int signo);
+
+void writeLogFile(int fdlog, pid_t pid, char* command);
 
 int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l, int r);
 

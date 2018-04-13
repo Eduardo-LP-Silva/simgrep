@@ -1,63 +1,107 @@
 #include "simgrep.h"
 
 static pid_t g_pid;
-static int cont = 0;
+static int cont = 0, fdlog;
+static clock_t start, end;
+static struct tms t;
+static long ticks;
 
-void sigint_handler(int signo)
-{
+void sigint_handler(int signo) {
 	char answer, trash;
-	do{
-		write(STDOUT_FILENO, "\nAre you sure you want to terminate the program? (Y/N) ", 55);
-		fflush(stdout);
+	writeLogFile(fdlog, getpid(), "SIGNAL");
+	write(fdlog, "SIGINT", 6);
+	write(fdlog,"\n",1);
+	do {
+		write(STDOUT_FILENO,
+				"\nAre you sure you want to terminate the program? (Y/N) ", 55);
+		fflush (stdout);
 		read(STDIN_FILENO, &answer, 1);
 		read(STDIN_FILENO, &trash, 1);
-		while(trash != '\n')
+		while (trash != '\n')
 			read(STDIN_FILENO, &trash, 1);
-		if (answer == 'Y' || answer == 'y')
-		{
+		if (answer == 'Y' || answer == 'y') {
 			kill(g_pid, SIGINT);
+			writeLogFile(fdlog, getpid(), "SIGNAL");
+			write(fdlog, "SIGINT para todos os processos", 30);
+			write(fdlog,"\n",1);
 			exit(2);
 		}
-		if(answer != 'N' && answer != 'n')
-			write(STDOUT_FILENO, "\nWrong answer. Try again.",25);
-	} while(answer != 'N' && answer != 'n');
+		if (answer != 'N' && answer != 'n')
+			write(STDOUT_FILENO, "\nWrong answer. Try again.", 25);
+	} while (answer != 'N' && answer != 'n');
 	cont = 1;
 }
 
-int main(int argc, char *argv[]) {
-	int fd1, fromKeyboard = 0, indexPat = argc - 1;
-	int c = 0, i = 0, n = 0, w = 0, l = 0, r = 0; //to check if -c, -i, -n, -w, -l, -r is called
-
-	if(argc < 2)
+void writeLogFile(int fdlog, pid_t pid, char* command)
+{
+	end = times(&t);
+	char *output = malloc(BUFFER_SIZE);
+	snprintf(output, 7, "%4.2f", (double) (end-start)/ticks);
+	write(fdlog, output, 7);
+	write(fdlog, " - ", 3);
+	char *output1 = malloc(BUFFER_SIZE);
+	snprintf(output1, 8, "%d", pid);
+	if(strlen(output1) < 8)
 	{
+		for(int i = 8 - strlen(output1); i > 0; i--)
+			write(fdlog, "0", 1);
+	}
+	write(fdlog, output1, 8);
+	write(fdlog, " -  ", 3);
+	write(fdlog, command, strlen(command));
+	write(fdlog, " ", 1);
+}
+
+int main(int argc, char *argv[], char *ecnvp[]) {
+	int fd1, fromKeyboard = 0, indexPat = argc - 1;
+	int c = 0, i = 0, n = 0, w = 0, l = 0, r = 0;
+	start = times(&t); /* início da medição de tempo */
+	ticks = sysconf(_SC_CLK_TCK);
+	char* logfilename = malloc(BUFFER_SIZE);
+	logfilename = getenv("LOGFILENAME");
+	fdlog = open(logfilename, O_WRONLY | O_APPEND | O_CREAT | O_EXCL, 0644);
+	if(fdlog < 0)
+	{
+		printf("Error opening log file name\n");
+	}
+	writeLogFile(fdlog, getpid(), "COMANDO");
+	for (int g = 0; g < argc; g++) {
+		write(fdlog, argv[g], strlen(argv[g]));
+		write(fdlog, " ", 1);
+	}
+	write(fdlog, "\n", 1);
+	
+	if (argc < 2) {
 		printf("Usage: simgrep [OPTION]... PATTERN [FILE]...\n");
+		close(fdlog);
 		return 1;
 	}
 
 	char* a = malloc(BUFFER_SIZE);
 
-	if(strlen(argv[argc-1]) > 4)
-	{
+	if (strlen(argv[argc - 1]) > 4) {
 		/*strncpy(a, argv[argc-1] + strlen(argv[argc-1]) - 4, 4);
-		if(a[0] != '.' || a[1] != 't' || a[2] != 'x' || a[3] != 't')*/
-		if(isFile(argv[argc-1]) == -1)
+		 if(a[0] != '.' || a[1] != 't' || a[2] != 'x' || a[3] != 't')*/
+		if (isFile(argv[argc - 1]) == -1)
 			fromKeyboard = 1;
 	}
-	if(fromKeyboard || strlen(argv[argc-1]) <= 4)
-	{
+	if (fromKeyboard || strlen(argv[argc - 1]) <= 4) {
 		fd1 = STDIN_FILENO;
 	} else {
-		fd1 = open(argv[argc-1], O_RDONLY);
+		fd1 = open(argv[argc - 1], O_RDONLY);
 		if (fd1 == -1) {
-			perror(argv[argc-1]);
+			writeLogFile(fdlog, getpid(), "ERRO");
+			write(fdlog, "couldn't open file",18);
+			perror(argv[argc - 1]);
+			close(fdlog);
 			return 2;
 		}
-		indexPat = argc-2;
+		indexPat = argc - 2;
 	}
 
 	for (int j = 1; j < argc; j++) {
 		strncpy(a, argv[j], 2);
-		if(a[0] != '-')
+		if (a[0] != '-')
 			break;
 		if (a[1] == 'c')
 			c = 1;
@@ -72,14 +116,19 @@ int main(int argc, char *argv[]) {
 		else if (a[1] == 'r')
 			r = 1;
 	}
+	if(r == 0 && fromKeyboard != 1)
+	{
+		writeLogFile(fdlog, getpid(), "ABERTO");
+		write(fdlog, argv[argc-1], strlen(argv[argc-1]));
+		write(fdlog, "\n", 1);
+	}
 
 	int isfile;
-	if(r == 1)
-	{
-		isfile = isFile(argv[argc-1]);
-		if(isfile == 0)
+	if (r == 1) {
+		isfile = isFile(argv[argc - 1]);
+		if (isfile == 0)
 			r = 0;
-		else if(isfile == 1 || isfile == 2)
+		else if (isfile == 1 || isfile == 2)
 			indexPat = argc - 2;
 	}
 
@@ -92,111 +141,116 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	if(r == 1)
-	{
+	if (r == 1) {
 		close(fd1);
-		if(isfile != -1)
-			simgrep_r(argv[argc-2], argv[argc-1], l, n, c, w, i);
+		if (isfile != -1)
+			simgrep_r(argv[argc - 2], argv[argc - 1], l, n, c, w, i);
 		else
 
-			simgrep_r(argv[argc-1], ".", l, n, c, w, i);
+			simgrep_r(argv[argc - 1], ".", l, n, c, w, i);
 		return 0;
 	}
 
-	goingon: reading(argv[argc-1],fd1, argv[indexPat], c, i, n,w, l, r);
+	goingon: reading(argv[argc - 1], fd1, argv[indexPat], c, i, n, w, l, r);
 
-	if(cont)
-	{
+	if (cont) {
 		cont = 0;
 		goto goingon;
 	}
 
 	close(fd1);
+	writeLogFile(fdlog, getpid(), "FECHADO");
+	write(fdlog, argv[argc-1], strlen(argv[argc-1]));
+	write(fdlog, "\n", 1);
 	return 0;
 }
 
-int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l, int r)
-{
+int reading(char* file, int fd1, char* word, int count, int i, int n, int w,
+		int l, int r) {
 	char c;
-	int m = 0, nWords =0, n_line = 0;
+	int m = 0, nWords = 0, n_line = 0;
 	char buffer[BUFFER_SIZE];
-	if(n)
+	if (n)
 		n_line++;
 
 	while (read(fd1, &c, 1) > 0) {
 		buffer[m] = c;
 		m++;
-		if(c == '\n')
-		{
-			char *check_word = malloc(m*sizeof(char));
+		if (c == '\n') {
+			char *check_word = malloc(m * sizeof(char));
 			strncpy(check_word, buffer, m);
 			m = 0;
 
-			if(strlen(check_word) >= strlen(word))
-			{
-				if(i && !w){
-					if(getWordInSentence_i(file,check_word, word, count, n_line,l,r)==1)
-						{nWords++;
+			if (strlen(check_word) >= strlen(word)) {
+				if (i && !w) {
+					if (getWordInSentence_i(file, check_word, word, count,
+							n_line, l, r) == 1) {
+						nWords++;
 
-						if(l==1){
-							if(fd1==STDIN_FILENO){
-							printf(COLOR_MAGENTA "(standard input)" RESET_COLOR "\n");
-							return 0;}
+						if (l == 1) {
+							if (fd1 == STDIN_FILENO) {
+								printf(COLOR_MAGENTA "(standard input)" RESET_COLOR "\n");
+								return 0;
+							}
 
-							else
-							{
+							else {
 								printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
 								return 0;
 							}
-					}}
+						}
+					}
 				} else if (i && w) {
 					if (getWordInSentence_w_i(file, check_word, word, count,
 							n_line, l, r) == 1) {
 						nWords++;
 
-						if (l == 1){
+						if (l == 1) {
 							if (fd1 == STDIN_FILENO) {
 								printf(
 										COLOR_MAGENTA "(standard input)" RESET_COLOR "\n");
 								return 0;
-							} else
-							{
+							} else {
 								printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
 								return 0;
 							}
-					}}
+						}
+					}
 				} else if (!i && w) {
-					if (getWordInSentence_w(file, check_word, word, count,n_line, l, r) == 1) {
+					if (getWordInSentence_w(file, check_word, word, count,
+							n_line, l, r) == 1) {
 						nWords++;
 
-						if (l == 1){
+						if (l == 1) {
 							if (fd1 == STDIN_FILENO) {
 								printf(COLOR_MAGENTA "(standard input)" RESET_COLOR "\n");
 								return 0;
-							} else
-							{
+							} else {
 								printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
 								return 0;
 							}
-				}}
+						}
+					}
 				} else {
 
-					if(getWordInSentence(file,check_word, word, count, n_line,l,r)==1)
-						{nWords++;
+					if (getWordInSentence(file, check_word, word, count, n_line,
+							l, r) == 1) {
+						nWords++;
 
-						if(l==1){
-							if(fd1==STDIN_FILENO){
-							printf(COLOR_MAGENTA "(standard input)" RESET_COLOR "\n");
-							return 0;}
+						if (l == 1) {
+							if (fd1 == STDIN_FILENO) {
+								printf(COLOR_MAGENTA "(standard input)" RESET_COLOR "\n");
+								return 0;
+							}
 
-							else
-							{
+							else {
 								printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
 								return 0;
-							}}
+							}
 						}
-			}}
-			if(n)
+					}
+				}
+			}
+			if (n)
 				n_line++;
 		}
 	}
@@ -204,53 +258,55 @@ int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l
 		char *check_word = malloc(m * sizeof(char));
 		strncpy(check_word, buffer, m);
 		m = 0;
-		if(strlen(check_word) >= strlen(word))
-			{
-				if(i && !w){
-					if(getWordInSentence_i(file,check_word, word, count, n_line,l,r)==1)
-						{nWords++;
-						if(l==1)
-							printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
-							return 0;
-						}}
-				else if(w && i){
-					if(getWordInSentence_w_i(file,check_word, word, count, n_line,l,r)==1)
-						{nWords++;
-						if(l==1)
-							printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
-							return 0;
-						}}
-				else if(w && !i){
-					if(getWordInSentence_w(file,check_word, word, count, n_line,l,r)==1)
-						{nWords++;
-						if(l==1)
-							printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
-							return 0;
-						}}
-				else
+		if (strlen(check_word) >= strlen(word)) {
+			if (i && !w) {
+				if (getWordInSentence_i(file, check_word, word, count, n_line,
+						l, r) == 1) {
+					nWords++;
+					if(l==1)
+					printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+					return 0;
+				}
+			} else if (w && i) {
+				if (getWordInSentence_w_i(file, check_word, word, count, n_line,
+						l, r) == 1) {
+					nWords++;
+					if(l==1)
+					printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+					return 0;
+				}
+			} else if (w && !i) {
+				if (getWordInSentence_w(file, check_word, word, count, n_line,
+						l, r) == 1) {
+					nWords++;
+					if(l==1)
+					printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+					return 0;
+				}
+			} else
 
-					if(getWordInSentence(file,check_word, word, count, n_line,l,r)==1)
-						{
-						nWords++;
-						if(l==1)
-							printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
-							return 0;
-						}
+			if (getWordInSentence(file, check_word, word, count, n_line, l, r)
+					== 1) {
+				nWords++;
+				if(l==1)
+				printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+				return 0;
 			}
+		}
 	}
 	if(count && !r)
-		printf("%d\n", nWords);
+	printf("%d\n", nWords);
 	else if (count && r)
-		printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR "%d\n",file, nWords);
+	printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR "%d\n",file, nWords);
 	return 0;
 }
 
-int getWordInSentence(char* file, char* sentence, char* word, int notToShow, int nl, int l, int r)
-{
+int getWordInSentence(char* file, char* sentence, char* word, int notToShow,
+		int nl, int l, int r) {
 	int i = 0, j = 0;
 	int number = 0, found = 0;
-	char* check_word = malloc(strlen(word)*sizeof(char));
-	while (i < strlen(sentence) -strlen(word)) {
+	char* check_word = malloc(strlen(word) * sizeof(char));
+	while (i < strlen(sentence) - strlen(word)) {
 		strncpy(check_word, sentence + i, strlen(word));
 		int equals = 1;
 		for (int m = 0; m < strlen(word); m++) {
@@ -260,41 +316,38 @@ int getWordInSentence(char* file, char* sentence, char* word, int notToShow, int
 		if (equals == 1) {
 			number++;
 
-			if(found == 0){
+			if (found == 0) {
 				found = 1;
-				if(l==1)
+				if (l == 1)
 					return 1;
-			}
-			else
-				if(found == 1)
-					found = 2;
+			} else if (found == 1)
+				found = 2;
 
-			if(notToShow)
+			if (notToShow)
 				break;
 			if (i != j) {
 				char* to_show = malloc(BUFFER_SIZE);
 				strncpy(to_show, sentence + j, i - j);
 				if (found == 1 && r != 0)
-					printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
+				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 				if(found == 1 && nl != 0)
-					printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
+				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 				printf("%s", to_show);
 			}
 			if (i == 0 && found == 1 && r != 0)
-				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
+			printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 			if(i == 0 && found == 1 && nl != 0)
-				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
+			printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 			printf(COLOR_RED "%s" RESET_COLOR, check_word);
 			j = i + strlen(word);
 		}
 		i++;
 	}
-	if(number > 0)
-	{
-		if(notToShow)
+	if (number > 0) {
+		if (notToShow)
 			return 1;
 		char* to_show = malloc(BUFFER_SIZE);
-		strncpy(to_show, sentence + j, strlen(sentence)-j);
+		strncpy(to_show, sentence + j, strlen(sentence) - j);
 		printf("%s", to_show);
 		return 1;
 	}
@@ -302,74 +355,70 @@ int getWordInSentence(char* file, char* sentence, char* word, int notToShow, int
 	return 0;
 }
 
-int getWordInSentence_i(char* file, char* sentence, char* word, int notToShow, int nl,int l, int r)
-{
+int getWordInSentence_i(char* file, char* sentence, char* word, int notToShow,
+		int nl, int l, int r) {
 	int i = 0, j = 0;
 	int number = 0, found = 0;
-	char* check_word = malloc(strlen(word)*sizeof(char));
-	while (i < strlen(sentence) -strlen(word)) {
+	char* check_word = malloc(strlen(word) * sizeof(char));
+	while (i < strlen(sentence) - strlen(word)) {
 		strncpy(check_word, sentence + i, strlen(word));
 		int equals = 1;
 		for (int m = 0; m < strlen(word); m++) {
-			if (check_word[m] != word[m] && (int) check_word[m] != (int) word[m] + 32
+			if (check_word[m] != word[m]
+					&& (int) check_word[m] != (int) word[m] + 32
 					&& (int) check_word[m] != (int) word[m] - 32)
-						equals = 0;
+				equals = 0;
 		}
 		if (equals == 1) {
 			number++;
 
-			
-			if(found == 0){
+			if (found == 0) {
 				found = 1;
-				if(l==1)
+				if (l == 1)
 					return 1;
-			}
-			else
-				if(found == 1)
-					found = 2;
+			} else if (found == 1)
+				found = 2;
 
-			if(notToShow)
+			if (notToShow)
 				break;
 			if (i != j) {
 				char* to_show = malloc(BUFFER_SIZE);
 				strncpy(to_show, sentence + j, i - j);
 				if (found == 1 && r != 0)
-					printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
+				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 				if(found == 1 && nl != 0)
-					printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
+				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 				printf("%s", to_show);
 			}
 			if (i == 0 && found == 1 && r != 0)
-				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
+			printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 			if(i == 0 && found == 1 && nl != 0)
-				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
+			printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 			printf(COLOR_RED "%s" RESET_COLOR, check_word);
 			j = i + strlen(word);
 		}
 		i++;
 	}
-	if(number > 0)
-	{
-		if(notToShow)
+	if (number > 0) {
+		if (notToShow)
 			return 1;
 		char* to_show = malloc(BUFFER_SIZE);
-		strncpy(to_show, sentence + j, strlen(sentence)-j);
+		strncpy(to_show, sentence + j, strlen(sentence) - j);
 		printf("%s", to_show);
 		return 1;
 	}
 	return 0;
 }
 
-int getWordInSentence_w(char* file, char* sentence, char* word, int notToShow, int nl, int l, int r)
-{
+int getWordInSentence_w(char* file, char* sentence, char* word, int notToShow,
+		int nl, int l, int r) {
 	int i = 0, j = 0;
 	int number = 0, found = 0;
-	char space=' ';
+	char space = ' ';
 
-	char* check_word = malloc(strlen(word)*sizeof(char));
+	char* check_word = malloc(strlen(word) * sizeof(char));
 
-	if(strlen(sentence) == strlen(word)+1)
-		{
+	if (strlen(sentence) == strlen(word) + 1) {
 		int equals = 1;
 		strncpy(check_word, sentence + i, strlen(word));
 		for (int m = 0; m < strlen(word); m++) {
@@ -377,20 +426,20 @@ int getWordInSentence_w(char* file, char* sentence, char* word, int notToShow, i
 				equals = 0;
 		}
 
-		if(equals==1){
-			if(l==1)
+		if (equals == 1) {
+			if (l == 1)
 				return 1;
 			if(r != 0)
-				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
+			printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 			if(nl!=0)
-				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
+			printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 			printf(COLOR_RED "%s" RESET_COLOR "\n", word);
 			return 1;
 		}
-		return 0;}
-	
-		
-	while (i < strlen(sentence) -strlen(word)-1) {
+		return 0;
+	}
+
+	while (i < strlen(sentence) - strlen(word) - 1) {
 		int equals = 1;
 
 		if (i == 0) {
@@ -405,122 +454,112 @@ int getWordInSentence_w(char* file, char* sentence, char* word, int notToShow, i
 							break;
 						}
 					}
-				}
-				else if (*(check_word + m) != *(word + m)) {
+				} else if (*(check_word + m) != *(word + m)) {
 					equals = 0;
 					break;
 				}
 			}
 
-		}
-		else if(i==strlen(sentence) -strlen(word)-2)
-		{
-			strncpy(check_word, sentence + i, strlen(word)+1);
-			
-		for (int m = 0; m < strlen(word)+1; m++) {
-			if (m==0){
-			
-				
-				if((*check_word)!=space && ispunct(*(check_word)) == 0){
-			
-				equals=0;
-				break;}
-				}
-					
-			else if (*(check_word + m) != *(word + m-1))
-				{				
-				equals = 0;
-				break;
-				}	
-			
-		}
-		}
-		else {
-		strncpy(check_word, sentence + i, strlen(word)+1+1);
-		
+		} else if (i == strlen(sentence) - strlen(word) - 2) {
+			strncpy(check_word, sentence + i, strlen(word) + 1);
 
-		for (int m = 0; m < strlen(word)+2; m++) {
-			if (m==0){
-				
-				if((*check_word)!=space){
-				equals=0;
-				break;}
+			for (int m = 0; m < strlen(word) + 1; m++) {
+				if (m == 0) {
+
+					if ((*check_word) != space && ispunct(*(check_word)) == 0) {
+
+						equals = 0;
+						break;
+					}
 				}
 
-			else if(m== strlen(word)+1){
-				if(((*(check_word+m))!=space)){
-				if(ispunct(*(check_word+m))==0){
-				equals=0;
-				break;
-					}}
+				else if (*(check_word + m) != *(word + m - 1)) {
+					equals = 0;
+					break;
+				}
+
 			}
-				
-			else if (*(check_word + m) != *(word + m-1))
-				{				
-				equals = 0;
-				break;
-				}		
-			
-		}
+		} else {
+			strncpy(check_word, sentence + i, strlen(word) + 1 + 1);
+
+			for (int m = 0; m < strlen(word) + 2; m++) {
+				if (m == 0) {
+
+					if ((*check_word) != space) {
+						equals = 0;
+						break;
+					}
+				}
+
+				else if (m == strlen(word) + 1) {
+					if (((*(check_word + m)) != space)) {
+						if (ispunct(*(check_word + m)) == 0) {
+							equals = 0;
+							break;
+						}
+					}
+				}
+
+				else if (*(check_word + m) != *(word + m - 1)) {
+					equals = 0;
+					break;
+				}
+
+			}
 		}
 		if (equals == 1) {
 			number++;
 
-
-			
-			if(found == 0){
+			if (found == 0) {
 				found = 1;
-				if(l==1)
+				if (l == 1)
 					return 1;
-			}
-			else
-				if(found == 1)
-					found = 2;
+			} else if (found == 1)
+				found = 2;
 
-			if(notToShow)
+			if (notToShow)
 				break;
 			if (i != j) {
 				char* to_show = malloc(BUFFER_SIZE);
 				strncpy(to_show, sentence + j, i - j);
 				if (found == 1 && r != 0)
-					printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
+				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 				if(found == 1 && nl != 0)
-					printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
+				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 				printf("%s", to_show);
 			}
 			if (i == 0 && found == 1 && r != 0)
-				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
+			printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 			if(i == 0 && found == 1 && nl != 0)
-				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
-			if(i!=0)
+			printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
+			if (i != 0)
 				printf("%c", *check_word); //changed here
 
 			printf(COLOR_RED "%s" RESET_COLOR, word);
-			
-			if(i!=strlen(sentence) -strlen(word)-2)
-			printf("%c",*(check_word+strlen(check_word)-1));
 
-			if(i==0 || (i==strlen(sentence) -strlen(word)-2))
-			j = i + strlen(word)+1;
-			else			
-			j = i + strlen(word)+2;
+			if (i != strlen(sentence) - strlen(word) - 2)
+				printf("%c", *(check_word + strlen(check_word) - 1));
+
+			if (i == 0 || (i == strlen(sentence) - strlen(word) - 2))
+				j = i + strlen(word) + 1;
+			else
+				j = i + strlen(word) + 2;
 		}
 		i++;
 	}
-	if(number > 0)
-	{
-		if(notToShow)
+	if (number > 0) {
+		if (notToShow)
 			return 1;
 		char* to_show = malloc(BUFFER_SIZE);
-		strncpy(to_show, sentence + j, strlen(sentence)-j);
+		strncpy(to_show, sentence + j, strlen(sentence) - j);
 		printf("%s", to_show);
 		return 1;
 	}
 	return 0;
 }
 
-int getWordInSentence_w_i(char* file, char* sentence, char* word, int notToShow, int nl, int l, int r)
-{
+int getWordInSentence_w_i(char* file, char* sentence, char* word, int notToShow,
+		int nl, int l, int r) {
 	int i = 0, j = 0;
 	int number = 0, found = 0;
 	char space = ' ';
@@ -531,7 +570,8 @@ int getWordInSentence_w_i(char* file, char* sentence, char* word, int notToShow,
 		int equals = 1;
 		strncpy(check_word, sentence + i, strlen(word));
 		for (int m = 0; m < strlen(word); m++) {
-			if (check_word[m] != word[m] && (int) check_word[m] != (int) word[m] + 32
+			if (check_word[m] != word[m]
+					&& (int) check_word[m] != (int) word[m] + 32
 					&& (int) check_word[m] != (int) word[m] - 32)
 				equals = 0;
 		}
@@ -540,9 +580,9 @@ int getWordInSentence_w_i(char* file, char* sentence, char* word, int notToShow,
 			if (l == 1)
 				return 1;
 			if (r != 0)
-				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
+			printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 			if(nl != 0)
-				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
+			printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 			printf(COLOR_RED "%s" RESET_COLOR "\n", check_word);
 			return 1;
 		}
@@ -590,15 +630,15 @@ int getWordInSentence_w_i(char* file, char* sentence, char* word, int notToShow,
 					}
 				}
 
-				else if (check_word[m] != word[m-1] && (int) check_word[m] != (int) word[m-1] + 32
-						&& (int) check_word[m] != (int) word[m-1] - 32) {
+				else if (check_word[m] != word[m - 1]
+						&& (int) check_word[m] != (int) word[m - 1] + 32
+						&& (int) check_word[m] != (int) word[m - 1] - 32) {
 					equals = 0;
 					break;
 				}
 
 			}
-		}
-		else {
+		} else {
 			strncpy(check_word, sentence + i, strlen(word) + 1 + 1);
 
 			for (int m = 0; m < strlen(word) + 2; m++) {
@@ -619,8 +659,9 @@ int getWordInSentence_w_i(char* file, char* sentence, char* word, int notToShow,
 					}
 				}
 
-				else if (check_word[m] != word[m-1] && (int) check_word[m] != (int) word[m-1] + 32
-						&& (int) check_word[m] != (int) word[m-1] - 32) {
+				else if (check_word[m] != word[m - 1]
+						&& (int) check_word[m] != (int) word[m - 1] + 32
+						&& (int) check_word[m] != (int) word[m - 1] - 32) {
 					equals = 0;
 					break;
 				}
@@ -643,23 +684,23 @@ int getWordInSentence_w_i(char* file, char* sentence, char* word, int notToShow,
 				char* to_show = malloc(BUFFER_SIZE);
 				strncpy(to_show, sentence + j, i - j);
 				if (found == 1 && r != 0)
-					printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
+				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 				if(found == 1 && nl != 0)
-					printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
+				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 				printf("%s", to_show);
 			}
 			if (i == 0 && found == 1 && r != 0)
-				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
+			printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 			if(i == 0 && found == 1 && nl != 0)
-				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
+			printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 			if (i != 0)
 				printf("%c", *check_word); //changed here
 
 			char* str = malloc(strlen(word));
-			if(strlen(check_word) == strlen(word) + 1 && i == 0)
+			if (strlen(check_word) == strlen(word) + 1 && i == 0)
 				strncpy(str, check_word, strlen(word));
 			else
-				strncpy(str, check_word+1, strlen(word));
+				strncpy(str, check_word + 1, strlen(word));
 			printf(COLOR_RED "%s" RESET_COLOR, str);
 
 			if (i != strlen(sentence) - strlen(word) - 2)
@@ -684,60 +725,52 @@ int getWordInSentence_w_i(char* file, char* sentence, char* word, int notToShow,
 }
 
 /* Returns 0 if it is a file, 1 if a directory, 2 if current directory or directory above,
-   -1 if an error occurred*/
-int isFile(char *name)
-{
-    int status;
-    struct stat st_buf;
+ -1 if an error occurred*/
+int isFile(char *name) {
+	int status;
+	struct stat st_buf;
 
-    char* dot = malloc(BUFFER_SIZE), *two_dots = malloc(BUFFER_SIZE);
-    strncpy(dot, name + strlen(name)-1, 1);
-    if(strlen(name)>=2)
-    	strncpy(two_dots, name + strlen(name)-2, 2);
-    status = stat(name, &st_buf);
+	char* dot = malloc(BUFFER_SIZE), *two_dots = malloc(BUFFER_SIZE);
+	strncpy(dot, name + strlen(name) - 1, 1);
+	if (strlen(name) >= 2)
+		strncpy(two_dots, name + strlen(name) - 2, 2);
+	status = stat(name, &st_buf);
 
+	if (status != 0) {
+		// printf("Error in opening file/directory:\n", name);
+		return -1;
+	}
 
-    if(status != 0)
-    {
-       // printf("Error in opening file/directory:\n", name);
-        return -1;
-    }
+	if (!strcmp(dot, ".") || (strlen(name) >= 2 && !strcmp(two_dots, "..")))
+		return 2;
 
-    if(!strcmp(dot, ".") || (strlen(name)>=2 && !strcmp(two_dots, "..")) )
-        return 2;
+	if (S_ISREG(st_buf.st_mode)) {
+		char* txt = malloc(BUFFER_SIZE), *c = malloc(BUFFER_SIZE);
+		if (strlen(name) >= 4) {
+			strncpy(txt, name + strlen(name) - 4, 4);
+			if (!strcmp(txt, ".txt"))
+				return 0;
+		}
+		if (strlen(name) >= 2) {
+			strncpy(c, name + strlen(name) - 2, 2);
+			if (!strcmp(c, ".c"))
+				return 0;
+		}
+		return 2;
+	}
 
-    if(S_ISREG(st_buf.st_mode))
-    {
-    	char* txt = malloc(BUFFER_SIZE), *c = malloc(BUFFER_SIZE);
-    	if(strlen(name)>=4)
-    	{
-    		strncpy(txt, name + strlen(name)-4, 4);
-    		if(!strcmp(txt,".txt"))
-    			return 0;
-    	}
-    	if(strlen(name)>=2)
-    	{
-    		strncpy(c, name + strlen(name) - 2, 2);
-    		if(!strcmp(c,".c"))
-    		    return 0;
-    	}
-    	return 2;
-    }
+	if (S_ISDIR(st_buf.st_mode))
+		return 1;
 
-
-    if(S_ISDIR(st_buf.st_mode))
-        return 1;
-
-    return -1;
+	return -1;
 }
 
-int simgrep_r(char *word, char *directory, int l, int n, int c, int w, int i)
-{
-    DIR *d;
-    struct dirent *dir;
-    int file_type;
-    int fd1;
-    pid_t pid;
+int simgrep_r(char *word, char *directory, int l, int n, int c, int w, int i) {
+	DIR *d;
+	struct dirent *dir;
+	int file_type;
+	int fd1;
+	pid_t pid;
 	d = opendir(directory);
 
 	if (d) {
@@ -748,41 +781,49 @@ int simgrep_r(char *word, char *directory, int l, int n, int c, int w, int i)
 			strcat(str1, dir->d_name);
 			file_type = isFile(str1);
 
-            switch(file_type)
-            {
-                case -1:
-                    return 0;
+			switch (file_type) {
+			case -1:
+				return 0;
 
-                case 0:
-                	fd1 = open(dir->d_name, O_RDONLY);
-                	char* str = malloc(BUFFER_SIZE);
-                	strcat(str, directory);
-                	strcat(str,"/");
-                	strcat(str,dir->d_name);
-                	reading(str, fd1, word, c,i,n,w,l,1);
-                	close(fd1);
-                    break;
+			case 0:
+				fd1 = open(dir->d_name, O_RDONLY);
+				writeLogFile(fdlog, getpid(), "ABERTO");
+				char* str = malloc(BUFFER_SIZE);
+				strcat(str, directory);
+				strcat(str, "/");
+				strcat(str, dir->d_name);
+				write(fdlog, str, strlen(str));
+				write(fdlog,"\n",1);
+				reading(str, fd1, word, c, i, n, w, l, 1);
+				writeLogFile(fdlog, getpid(), "FECHADO");
+				write(fdlog, str, strlen(str));
+				write(fdlog,"\n",1);
+				close(fd1);
+				break;
 
-                case 1:
-                	pid = fork();
-                	if(pid == 0)
-                	{
-                		setpgrp();
-                		simgrep_r(word, str1, l, n, c, w, i);
-                		return 0;
-                	}
-                	else
-                	{
-                		g_pid = getpgid(getpid());
-                		waitpid(pid, NULL ,0);
-                	}
-                    break;
+			case 1:
+				pid = fork();
+				if (pid == 0) {
+					setpgrp();
+					writeLogFile(fdlog, getpid(), "ABERTO");
+					write(fdlog, str1, strlen(str1));
+					write(fdlog,"\n",1);
+					simgrep_r(word, str1, l, n, c, w, i);
+					return 0;
+				} else {
+					g_pid = getpgid(getpid());
+					waitpid(pid, NULL, 0);
+				}
+				break;
 
-                case 2:
-                    break;
-            }
-        }
+			case 2:
+				break;
+			}
+		}
 		closedir(d);
+		writeLogFile(fdlog, getpid(), "FECHADO");
+		write(fdlog, directory, strlen(directory));
+		write(fdlog,"\n",1);
 	}
 	return 0;
 }
