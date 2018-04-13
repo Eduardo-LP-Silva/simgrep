@@ -4,20 +4,26 @@
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
+#include <dirent.h>
+#include <sys/stat.h>
 #include <signal.h>
 
 #define BUFFER_SIZE 512
 #define COLOR_RED     "\x1b[31m"
 #define COLOR_GREEN  "\x1B[32m"
 #define COLOR_MAGENTA "\x1B[35m"
+#define COLOR_CYAN    "\x1b[36m"
 #define RESET_COLOR   "\x1b[0m"
 
-
+static pid_t g_pid;
 static int cont = 0;
 
-int getWordInSentence(char* sentence, char* word, int notToShow, int nl,int l);
-int getWordInSentence_w(char* sentence, char* word, int notToShow, int nl,int l);
-int getWordInSentence_i(char* sentence, char* word, int notToShow, int nl,int l);
+int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l, int r);
+int getWordInSentence(char* file, char* sentence, char* word, int notToShow, int nl, int l, int r);
+int getWordInSentence_i(char* file, char* sentence, char* word, int notToShow, int nl, int l, int r);
+int getWordInSentence_w(char* file, char* sentence, char* word, int notToShow, int nl, int l, int r);
+int getWordInSentence_w_i(char* file, char* sentence, char* word, int notToShow, int nl, int l, int r);
+int simgrep_r(char *word, char *directory, int l, int n, int c, int w, int i);
 
 void sigint_handler(int signo)
 {
@@ -30,16 +36,19 @@ void sigint_handler(int signo)
 		while(trash != '\n')
 			read(STDIN_FILENO, &trash, 1);
 		if (answer == 'Y' || answer == 'y')
+		{
+			kill(g_pid, SIGINT);
 			exit(2);
+		}
 		if(answer != 'N' && answer != 'n')
 			write(STDOUT_FILENO, "\nWrong answer. Try again.",25);
-	} while(answer != 'N');
+	} while(answer != 'N' && answer != 'n');
 	cont = 1;
 }
 
 int main(int argc, char *argv[]) {
-	int fd1, n_read, fromKeyboard = 0, indexPat = argc - 1;
-	int c = 0, i = 0, n = 0, w = 0, l = 0, r = 0; //to say if -c, -i, -n, -w, -l, -r is called
+	int fd1, fromKeyboard = 0, indexPat = argc - 1;
+	int c = 0, i = 0, n = 0, w = 0, l = 0, r = 0; //to check if -c, -i, -n, -w, -l, -r is called
 
 	if(argc < 2)
 	{
@@ -51,13 +60,13 @@ int main(int argc, char *argv[]) {
 
 	if(strlen(argv[argc-1]) > 4)
 	{
-		strncpy(a, argv[argc-1] + strlen(argv[argc-1]) - 4, 4);
-		if(a[0] != '.' || a[1] != 't' || a[2] != 'x' || a[3] != 't')
+		/*strncpy(a, argv[argc-1] + strlen(argv[argc-1]) - 4, 4);
+		if(a[0] != '.' || a[1] != 't' || a[2] != 'x' || a[3] != 't')*/
+		if(isFile(argv[argc-1]) == -1)
 			fromKeyboard = 1;
 	}
 	if(fromKeyboard || strlen(argv[argc-1]) <= 4)
 	{
-		fromKeyboard == 1;
 		fd1 = STDIN_FILENO;
 	} else {
 		fd1 = open(argv[argc-1], O_RDONLY);
@@ -86,6 +95,16 @@ int main(int argc, char *argv[]) {
 			r = 1;
 	}
 
+	int isfile;
+	if(r == 1)
+	{
+		isfile = isFile(argv[argc-1]);
+		if(isfile == 0)
+			r = 0;
+		else if(isfile == 1 || isfile == 2)
+			indexPat = argc - 2;
+	}
+
 	struct sigaction action;
 	action.sa_handler = sigint_handler;
 	sigemptyset(&action.sa_mask);
@@ -95,7 +114,18 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	goingon: reading(argv[argc-1],fd1, argv[indexPat], c, i, n,w, l);
+	if(r == 1)
+	{
+		close(fd1);
+		if(isfile != -1)
+			simgrep_r(argv[argc-2], argv[argc-1], l, n, c, w, i);
+		else
+
+			simgrep_r(argv[argc-1], ".", l, n, c, w, i);
+		return 0;
+	}
+
+	goingon: reading(argv[argc-1],fd1, argv[indexPat], c, i, n,w, l, r);
 
 	if(cont)
 	{
@@ -107,7 +137,7 @@ int main(int argc, char *argv[]) {
 	return 0;
 }
 
-int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l)
+int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l, int r)
 {
 	char c;
 	int m = 0, nWords =0, n_line = 0;
@@ -127,51 +157,65 @@ int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l
 			if(strlen(check_word) >= strlen(word))
 			{
 				if(i && !w){
-					if(getWordInSentence_i(check_word, word, count, n_line,l)==1)
-						{nWords++;
-						
-						if(l==1)
-							if(fd1==STDIN_FILENO){
-							printf(COLOR_MAGENTA "(standard input)" RESET_COLOR "\n");
-							return 0;}
-								
-							else printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
-						}
-				}
-				else if (i && w){
-					if(getWordInSentence_w_i(check_word, word, count, n_line,l)==1)
+					if(getWordInSentence_i(file,check_word, word, count, n_line,l,r)==1)
 						{nWords++;
 
-						if(l==1)
+						if(l==1){
 							if(fd1==STDIN_FILENO){
 							printf(COLOR_MAGENTA "(standard input)" RESET_COLOR "\n");
 							return 0;}
 
-							else printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
-						}
-				}
-				else if(w){
-					if(getWordInSentence_w(check_word, word, count, n_line,l)==1)
+							else
+							{
+								printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+								return 0;
+							}
+					}}
+				} else if (i && w) {
+					if (getWordInSentence_w_i(file, check_word, word, count,
+							n_line, l, r) == 1) {
+						nWords++;
+
+						if (l == 1){
+							if (fd1 == STDIN_FILENO) {
+								printf(
+										COLOR_MAGENTA "(standard input)" RESET_COLOR "\n");
+								return 0;
+							} else
+							{
+								printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+								return 0;
+							}
+					}}
+				} else if (!i && w) {
+					if (getWordInSentence_w(file, check_word, word, count,n_line, l, r) == 1) {
+						nWords++;
+
+						if (l == 1){
+							if (fd1 == STDIN_FILENO) {
+								printf(COLOR_MAGENTA "(standard input)" RESET_COLOR "\n");
+								return 0;
+							} else
+							{
+								printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+								return 0;
+							}
+				}}
+				} else {
+
+					if(getWordInSentence(file,check_word, word, count, n_line,l,r)==1)
 						{nWords++;
-						
-						if(l==1)
-							if(fd1==STDIN_FILENO){
-							printf(COLOR_MAGENTA "(standard input)" RESET_COLOR "\n");
-								return 0;}
-							else printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
-						}
-				}
-				else{
-					
-					if(getWordInSentence(check_word, word, count, n_line,l)==1)
-						{nWords++;
-						
-						if(l==1)
+
+						if(l==1){
 							if(fd1==STDIN_FILENO){
 							printf(COLOR_MAGENTA "(standard input)" RESET_COLOR "\n");
 							return 0;}
-								
-							else printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+
+							else
+							{
+								printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+								return 0;
+							}}
 						}
 			}}
 			if(n)
@@ -185,43 +229,45 @@ int reading(char* file,int fd1, char* word, int count, int i, int n, int w,int l
 		if(strlen(check_word) >= strlen(word))
 			{
 				if(i && !w){
-					if(getWordInSentence_i(check_word, word, count, n_line,l)==1)
+					if(getWordInSentence_i(file,check_word, word, count, n_line,l,r)==1)
 						{nWords++;
 						if(l==1)
 							printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
 							return 0;
-						}
-				} else if (i && w) {
-					if (getWordInSentence_w_i(check_word, word, count, n_line, l)== 1) {
-						nWords++;
-						if (l == 1)
-							printf(COLOR_MAGENTA "%s" RESET_COLOR "\n", file);
-						return 0;
-					}
-				}
-				else if(w){
-					if(getWordInSentence_w(check_word, word, count, n_line,l)==1)
+						}}
+				else if(w && i){
+					if(getWordInSentence_w_i(file,check_word, word, count, n_line,l,r)==1)
+						{nWords++;
+						if(l==1)
+							printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
+							return 0;
+						}}
+				else if(w && !i){
+					if(getWordInSentence_w(file,check_word, word, count, n_line,l,r)==1)
 						{nWords++;
 						if(l==1)
 							printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
 							return 0;
 						}}
 				else
-					
-					if(getWordInSentence(check_word, word, count, n_line,l)==1)
-						{nWords++;
+
+					if(getWordInSentence(file,check_word, word, count, n_line,l,r)==1)
+						{
+						nWords++;
 						if(l==1)
 							printf(COLOR_MAGENTA "%s" RESET_COLOR "\n",file);
 							return 0;
 						}
 			}
 	}
-	if(count)
+	if(count && !r)
 		printf("%d\n", nWords);
+	else if (count && r)
+		printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR "%d\n",file, nWords);
 	return 0;
 }
-//normal
-int getWordInSentence(char* sentence, char* word, int notToShow, int nl, int l)
+
+int getWordInSentence(char* file, char* sentence, char* word, int notToShow, int nl, int l, int r)
 {
 	int i = 0, j = 0;
 	int number = 0, found = 0;
@@ -250,12 +296,16 @@ int getWordInSentence(char* sentence, char* word, int notToShow, int nl, int l)
 			if (i != j) {
 				char* to_show = malloc(BUFFER_SIZE);
 				strncpy(to_show, sentence + j, i - j);
+				if (found == 1 && r != 0)
+					printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 				if(found == 1 && nl != 0)
-					printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
+					printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 				printf("%s", to_show);
 			}
+			if (i == 0 && found == 1 && r != 0)
+				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 			if(i == 0 && found == 1 && nl != 0)
-				printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
+				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 			printf(COLOR_RED "%s" RESET_COLOR, check_word);
 			j = i + strlen(word);
 		}
@@ -270,11 +320,11 @@ int getWordInSentence(char* sentence, char* word, int notToShow, int nl, int l)
 		printf("%s", to_show);
 		return 1;
 	}
-	
+
 	return 0;
 }
 
-int getWordInSentence_i(char* sentence, char* word, int notToShow, int nl,int l)
+int getWordInSentence_i(char* file, char* sentence, char* word, int notToShow, int nl,int l, int r)
 {
 	int i = 0, j = 0;
 	int number = 0, found = 0;
@@ -305,12 +355,16 @@ int getWordInSentence_i(char* sentence, char* word, int notToShow, int nl,int l)
 			if (i != j) {
 				char* to_show = malloc(BUFFER_SIZE);
 				strncpy(to_show, sentence + j, i - j);
+				if (found == 1 && r != 0)
+					printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 				if(found == 1 && nl != 0)
-					printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
+					printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 				printf("%s", to_show);
 			}
+			if (i == 0 && found == 1 && r != 0)
+				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 			if(i == 0 && found == 1 && nl != 0)
-				printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
+				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 			printf(COLOR_RED "%s" RESET_COLOR, check_word);
 			j = i + strlen(word);
 		}
@@ -328,7 +382,7 @@ int getWordInSentence_i(char* sentence, char* word, int notToShow, int nl,int l)
 	return 0;
 }
 
-int getWordInSentence_w(char* sentence, char* word, int notToShow, int nl, int l)
+int getWordInSentence_w(char* file, char* sentence, char* word, int notToShow, int nl, int l, int r)
 {
 	int i = 0, j = 0;
 	int number = 0, found = 0;
@@ -348,10 +402,12 @@ int getWordInSentence_w(char* sentence, char* word, int notToShow, int nl, int l
 		if(equals==1){
 			if(l==1)
 				return 1;
-				if(nl!=0)
-			printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
-		printf(COLOR_RED "%s" RESET_COLOR "\n", word);
-		return 1;
+			if(r != 0)
+				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
+			if(nl!=0)
+				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
+			printf(COLOR_RED "%s" RESET_COLOR "\n", word);
+			return 1;
 		}
 		return 0;}
 	
@@ -448,12 +504,16 @@ int getWordInSentence_w(char* sentence, char* word, int notToShow, int nl, int l
 			if (i != j) {
 				char* to_show = malloc(BUFFER_SIZE);
 				strncpy(to_show, sentence + j, i - j);
+				if (found == 1 && r != 0)
+					printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 				if(found == 1 && nl != 0)
-					printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
+					printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 				printf("%s", to_show);
 			}
+			if (i == 0 && found == 1 && r != 0)
+				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
 			if(i == 0 && found == 1 && nl != 0)
-				printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
+				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 			if(i!=0)
 				printf("%c", *check_word); //changed here
 
@@ -481,7 +541,7 @@ int getWordInSentence_w(char* sentence, char* word, int notToShow, int nl, int l
 	return 0;
 }
 
-int getWordInSentence_w_i(char* sentence, char* word, int notToShow, int nl, int l)
+int getWordInSentence_w_i(char* file, char* sentence, char* word, int notToShow, int nl, int l, int r)
 {
 	int i = 0, j = 0;
 	int number = 0, found = 0;
@@ -501,8 +561,10 @@ int getWordInSentence_w_i(char* sentence, char* word, int notToShow, int nl, int
 		if (equals == 1) {
 			if (l == 1)
 				return 1;
-			if (nl != 0)
-				printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
+			if (r != 0)
+				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
+			if(nl != 0)
+				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 			printf(COLOR_RED "%s" RESET_COLOR "\n", check_word);
 			return 1;
 		}
@@ -602,12 +664,16 @@ int getWordInSentence_w_i(char* sentence, char* word, int notToShow, int nl, int
 			if (i != j) {
 				char* to_show = malloc(BUFFER_SIZE);
 				strncpy(to_show, sentence + j, i - j);
-				if (found == 1 && nl != 0)
-					printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
+				if (found == 1 && r != 0)
+					printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
+				if(found == 1 && nl != 0)
+					printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 				printf("%s", to_show);
 			}
-			if (i == 0 && found == 1 && nl != 0)
-				printf(COLOR_GREEN "%d:" RESET_COLOR, nl);
+			if (i == 0 && found == 1 && r != 0)
+				printf(COLOR_MAGENTA "%s" COLOR_CYAN ":" RESET_COLOR, file);
+			if(i == 0 && found == 1 && nl != 0)
+				printf(COLOR_GREEN "%d" COLOR_CYAN ":" RESET_COLOR, nl);
 			if (i != 0)
 				printf("%c", *check_word); //changed here
 
@@ -639,3 +705,89 @@ int getWordInSentence_w_i(char* sentence, char* word, int notToShow, int nl, int
 	return 0;
 }
 
+/* Returns 0 if it is a file, 1 if a directory, 2 if current directory or directory above,
+   -1 if an error occurred*/
+int isFile(char *name)
+{
+    int status;
+    struct stat st_buf;
+
+    char* dot = malloc(BUFFER_SIZE), *two_dots = malloc(BUFFER_SIZE);
+    strncpy(dot, name + strlen(name)-1, 1);
+    strncpy(two_dots, name + strlen(name)-2, 2);
+    status = stat(name, &st_buf);
+
+    if(status != 0)
+    {
+       // printf("Error in opening file/directory:\n", name);
+        return -1;
+    }
+
+    if(!strcmp(dot, ".") || !strcmp(two_dots, "..") )
+        return 2;
+
+    if(S_ISREG(st_buf.st_mode))
+        return 0;
+
+
+    if(S_ISDIR(st_buf.st_mode))
+        return 1;
+
+    return -1;
+}
+
+int simgrep_r(char *word, char *directory, int l, int n, int c, int w, int i)
+{
+    DIR *d;
+    struct dirent *dir;
+    int file_type;
+    int fd1;
+    pid_t pid;
+	d = opendir(directory);
+
+	if (d) {
+		while ((dir = readdir(d)) != NULL) {
+			char* str1 = malloc(BUFFER_SIZE);
+			strcat(str1, directory);
+			strcat(str1, "/");
+			strcat(str1, dir->d_name);
+			file_type = isFile(str1);
+
+            switch(file_type)
+            {
+                case -1:
+                    break;
+
+                case 0:
+                	fd1 = open(dir->d_name, O_RDONLY);
+                	char* str = malloc(BUFFER_SIZE);
+                	strcat(str, directory);
+                	strcat(str,"/");
+                	strcat(str,dir->d_name);
+                	reading(str, fd1, word, c,i,n,w,l,1);
+                	close(fd1);
+                    break;
+
+                case 1:
+                	pid = fork();
+                	if(pid == 0)
+                	{
+                		setpgrp();
+                		simgrep_r(word, str1, l, n, c, w, i);
+                		return 0;
+                	}
+                	else
+                	{
+                		g_pid = getpgid(getpid());
+                		waitpid(pid, NULL ,0);
+                	}
+                    break;
+
+                case 2:
+                    break;
+            }
+        }
+		closedir(d);
+	}
+	return 0;
+}
