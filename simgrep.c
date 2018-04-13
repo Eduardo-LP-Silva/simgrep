@@ -773,6 +773,7 @@ int simgrep_r(char *word, char *directory, int l, int n, int c, int w, int i) {
 	int fd1;
 	pid_t pid;
 	d = opendir(directory);
+	char *str;
 
 	if (d) {
 		while ((dir = readdir(d)) != NULL) {
@@ -787,12 +788,12 @@ int simgrep_r(char *word, char *directory, int l, int n, int c, int w, int i) {
 				return 0;
 
 			case 0:
-				fd1 = open(dir->d_name, O_RDONLY);
-				writeLogFile(fdlog, getpid(), "ABERTO");
-				char* str = malloc(BUFFER_SIZE);
+				str = malloc(BUFFER_SIZE);
 				strcat(str, directory);
 				strcat(str, "/");
 				strcat(str, dir->d_name);
+				fd1 = open(str, O_RDONLY);
+				writeLogFile(fdlog, getpid(), "ABERTO");
 				write(fdlog, str, strlen(str));
 				write(fdlog,"\n",1);
 				reading(str, fd1, word, c, i, n, w, l, 1);
