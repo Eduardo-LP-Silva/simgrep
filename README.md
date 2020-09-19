@@ -1,6 +1,6 @@
 # simgrep
 
-A simplified version of the "grep" command developed in the course of Operative Systems. It searches files and directories for text 
+A simplified version of the "grep" command developed in the Operative Systems class. It searches files and directories for text 
 patterns.
 
 ## Overview
